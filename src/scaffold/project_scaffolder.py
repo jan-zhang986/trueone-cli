@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 TrueOne Scaffolder
-负责创建 4 层标准化工程骨架 (Skills + Knowledge + QA + Tests)
+负责创建收敛在 tests/ 目录下的 4 层标准化工程骨架 (完全隔离，零侵入研发主仓代码)
 """
 import os
 import shutil
@@ -12,26 +12,32 @@ TEMPLATE_ROOT = Path(__file__).parent / "templates"
 
 
 class ProjectScaffolder:
-    """TrueOne 项目骨架生成器"""
+    """TrueOne 项目骨架生成器 (收敛在 tests 域内)"""
 
     def __init__(self, target_dir: str):
-        self.target_dir = Path(target_dir).resolve()
+        base_path = Path(target_dir).resolve()
+        # 如果传入的不是 tests 目录，则自动收敛在其 tests/ 子目录下，杜绝污染工程根目录
+        if base_path.name == "tests":
+            self.tests_root = base_path
+            self.project_root = base_path.parent
+        else:
+            self.tests_root = base_path / "tests"
+            self.project_root = base_path
 
     def init_project(self, app_name: str, lang: str = "go") -> Dict[str, Any]:
         """
-        初始化标准 4 层结构工程，并默认注入对应语言的 TrueOne SDK 依赖
+        初始化标准 4 层结构工程，全部自包含并收敛在 tests/ 目录下
         """
         lang = lang.lower()
-        skills_dir = self.target_dir / ".agents" / "skills"
-        knowledge_dir = self.target_dir / "knowledge" / "applications" / app_name
-        qa_dir = self.target_dir / "qa"
-        tests_dir = self.target_dir / "tests"
+        skills_dir = self.tests_root / ".agents" / "skills"
+        knowledge_dir = self.tests_root / "knowledge" / "applications" / app_name
+        qa_dir = self.tests_root / "qa"
 
-        # 1. 创建目录树
-        for d in [skills_dir, knowledge_dir / "domain" / "product", knowledge_dir / "tech", qa_dir, tests_dir]:
+        # 1. 创建 tests 内部分层目录树
+        for d in [skills_dir, knowledge_dir / "domain" / "product", knowledge_dir / "tech", qa_dir]:
             d.mkdir(parents=True, exist_ok=True)
 
-        # 2. 拷贝 / 生成 4 个核心 Skills
+        # 2. 拷贝 / 生成 4 个核心 Skills 到 tests/.agents/skills/
         src_skills = TEMPLATE_ROOT / "skills"
         if src_skills.exists():
             for skill_name in ["test-design", "test-codegen", "test-review", "test-validate"]:
@@ -41,8 +47,8 @@ class ProjectScaffolder:
                 if src_file.exists():
                     shutil.copy(src_file, dest / "SKILL.md")
 
-        # 3. 生成知识库核心引导文件 (ROUTING & INDEX & APP)
-        (self.target_dir / "knowledge" / "ROUTING.md").write_text(
+        # 3. 生成知识库核心引导文件到 tests/knowledge/
+        (self.tests_root / "knowledge" / "ROUTING.md").write_text(
             f"# Knowledge Routing\n\n- [{app_name}](applications/{app_name}/app-overview.md)\n",
             encoding="utf-8"
         )
@@ -51,16 +57,18 @@ class ProjectScaffolder:
             encoding="utf-8"
         )
 
-        # 4. 生成 QA 迭代接续指南
+        # 4. 生成 QA 迭代接续指南到 tests/qa/
         (qa_dir / "README.md").write_text(
             "# QA 迭代过程对账资产目录\n\n以需求 ID 为子目录，如 `qa/REQ-001/requirement.md`。\n",
             encoding="utf-8"
         )
 
-        # 5. 生成默认带 SDK 依赖的测试项目工程
+        # 5. 生成默认带 SDK 依赖的测试项目工程配置到 tests/ 根部
         created_files = []
         if lang == "go":
-            go_mod_content = f"""module {app_name}-tests
+            go_mod_path = self.tests_root / "go.mod"
+            if not go_mod_path.exists():
+                go_mod_content = f"""module {app_name}-tests
 
 go 1.22
 
@@ -71,20 +79,24 @@ require (
 // 本地开发模式映射
 replace github.com/vanguard/aegis-sdk-go => /Users/zhangjian/vanguard-platform/trueone-sdk/go
 """
-            (tests_dir / "go.mod").write_text(go_mod_content, encoding="utf-8")
-            created_files.append(str(tests_dir / "go.mod"))
+                go_mod_path.write_text(go_mod_content, encoding="utf-8")
+                created_files.append(str(go_mod_path))
 
         elif lang == "python":
-            req_content = """# TrueOne SDK 依赖
+            req_path = self.tests_root / "requirements.txt"
+            if not req_path.exists():
+                req_content = """# TrueOne SDK 依赖
 pytest>=7.0.0
 # 本地开发模式
 -e /Users/zhangjian/vanguard-platform/trueone-sdk/python
 """
-            (tests_dir / "requirements.txt").write_text(req_content, encoding="utf-8")
-            created_files.append(str(tests_dir / "requirements.txt"))
+                req_path.write_text(req_content, encoding="utf-8")
+                created_files.append(str(req_path))
 
         elif lang == "java":
-            pom_content = f"""<project xmlns="http://maven.apache.org/POM/4.0.0">
+            pom_path = self.tests_root / "pom.xml"
+            if not pom_path.exists():
+                pom_content = f"""<project xmlns="http://maven.apache.org/POM/4.0.0">
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.trueone</groupId>
   <artifactId>{app_name}-tests</artifactId>
@@ -99,17 +111,18 @@ pytest>=7.0.0
   </dependencies>
 </project>
 """
-            (tests_dir / "pom.xml").write_text(pom_content, encoding="utf-8")
-            created_files.append(str(tests_dir / "pom.xml"))
+                pom_path.write_text(pom_content, encoding="utf-8")
+                created_files.append(str(pom_path))
 
         return {
-            "targetDir": str(self.target_dir),
+            "projectRoot": str(self.project_root),
+            "testsRoot": str(self.tests_root),
             "appName": app_name,
             "language": lang,
             "layers": [
-                ".agents/skills/ (4个核心SOP技能)",
-                "knowledge/ (3支柱业务知识库)",
-                "qa/ (需求对账过程资产)",
+                "tests/.agents/skills/ (4个核心SOP技能)",
+                "tests/knowledge/ (3支柱业务知识库)",
+                "tests/qa/ (需求对账过程资产)",
                 f"tests/ (已内置接入 trueone-sdk/{lang})"
             ],
             "createdFiles": created_files
