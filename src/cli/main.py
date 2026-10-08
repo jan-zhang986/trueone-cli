@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 TrueOne CLI 入口
-提供 init (4层工程初始化) 与 scaffold-case (单用例生成)
+提供 init (4层工程初始化) 与 scaffold-case (单用例骨架生成)
 """
 import argparse
 import json
@@ -13,6 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scaffold.project_scaffolder import ProjectScaffolder
+from scaffold.case_scaffolder import CaseScaffolder
 
 
 def main():
@@ -28,6 +29,16 @@ def main():
     init_p.add_argument("--lang", default="go", choices=["go", "python", "java"], help="测试语言栈 (默认 go)")
     init_p.add_argument("--dir", default=".", help="目标初始化目录 (默认当前目录)")
     init_p.add_argument("--json", action="store_true", help="以 JSON 格式输出")
+
+    # 2. trueone scaffold-case
+    case_p = subparsers.add_parser("scaffold-case", help="生成符合 TrueOne 契约规范的单用例源码骨架")
+    case_p.add_argument("--lang", required=True, choices=["go", "python", "java"], help="用例开发语言")
+    case_p.add_argument("--req", required=True, help="关联需求 ID (如 REQ-ORDER-001)")
+    case_p.add_argument("--risk", default="P1", choices=["P0", "P1", "P2", "P3"], help="风险等级 (默认 P1)")
+    case_p.add_argument("--title", default="验证核心业务逻辑断言", help="用例标题描述")
+    case_p.add_argument("--id", dest="case_id", help="指定用例 ID (可选)")
+    case_p.add_argument("--dir", dest="target_dir", default="tests", help="输出目录 (默认 tests)")
+    case_p.add_argument("--json", action="store_true", help="以 JSON 格式输出")
 
     args = parser.parse_args()
     if not args.subcommand:
@@ -46,6 +57,22 @@ def main():
             for layer in res["layers"]:
                 print(f"   • {layer}")
             print(f"📦 已自动为 tests/ 注入 trueone-sdk/{args.lang} 依赖，开箱即用！")
+
+    elif args.subcommand == "scaffold-case":
+        res = CaseScaffolder.generate_case(
+            lang=args.lang,
+            req=args.req,
+            risk=args.risk,
+            title=args.title,
+            case_id=args.case_id,
+            target_dir=args.target_dir
+        )
+        if args.json:
+            print(json.dumps(res, ensure_ascii=False, indent=2))
+        else:
+            print(f"✅ 成功生成 [{args.lang.upper()}] 测试用例骨架: {res['caseId']}")
+            print(f"📁 文件已写入: {res['filePath']}")
+            print(f"🏷️ 绑定需求: {res['req']} | 风险等级: {res['risk']}")
 
 
 if __name__ == "__main__":
