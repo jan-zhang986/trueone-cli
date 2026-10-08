@@ -66,21 +66,24 @@ class ProjectScaffolder:
         # 5. 生成默认带 SDK 依赖的测试项目工程配置到 tests/ 根部
         created_files = []
         if lang == "go":
-            go_mod_path = self.tests_root / "go.mod"
-            if not go_mod_path.exists():
-                go_mod_content = f"""module {app_name}-tests
+            # 只有当父目录不是 Go 模块时，才在 tests/ 生成独立的 go.mod；若父目录已有 go.mod，则复用主工程模块体系，杜绝 nested module 破坏包导入
+            parent_mod = self.project_root / "go.mod"
+            if not parent_mod.exists():
+                go_mod_path = self.tests_root / "go.mod"
+                if not go_mod_path.exists():
+                    go_mod_content = f"""module {app_name}-tests
 
 go 1.22
 
 require (
-    github.com/vanguard/aegis-sdk-go v1.0.0
+    github.com/vanguard-platform/aegis-sdk-go v1.0.0
 )
 
 // 本地开发模式映射
-replace github.com/vanguard/aegis-sdk-go => /Users/zhangjian/vanguard-platform/trueone-sdk/go
+replace github.com/vanguard-platform/aegis-sdk-go => /Users/zhangjian/vanguard-platform/trueone-sdk/go
 """
-                go_mod_path.write_text(go_mod_content, encoding="utf-8")
-                created_files.append(str(go_mod_path))
+                    go_mod_path.write_text(go_mod_content, encoding="utf-8")
+                    created_files.append(str(go_mod_path))
 
         elif lang == "python":
             req_path = self.tests_root / "requirements.txt"

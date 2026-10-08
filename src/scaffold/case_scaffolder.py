@@ -38,23 +38,31 @@ class CaseScaffolder:
 
 import (
 \t"testing"
-\t"github.com/vanguard/aegis-sdk-go/aegis"
+
+\taegis "github.com/vanguard-platform/aegis-sdk-go"
 )
 
 func {func_name}(t *testing.T) {{
-\tc := aegis.NewCase(t, "{case_id}", "{req}", aegis.Risk{risk.upper()})
-\tdefer c.End()
+\tmeta := aegis.Meta{{
+\t\tID:       "{case_id}",
+\t\tReq:      "{req}",
+\t\tTitle:    "{title}",
+\t\tRisk:     "{risk.upper()}",
+\t\tPriority: "P1",
+\t}}
 
-\tc.Step("1. 初始化测试数据与前置上下文", func() {{
-\t\t// 构造入参与 Mock 上下文
-\t}})
+\taegis.Case(t, meta, func(c *aegis.Context) {{
+\t\tc.Step("1. 初始化测试数据与前置上下文", func() {{
+\t\t\t// 构造入参与 Mock 上下文
+\t\t}})
 
-\tc.Step("2. 执行核心业务调用并记录证据", func() {{
-\t\tc.AttachEvidence("req.json", []byte(`{{"caseId": "{case_id}"}}`))
-\t}})
+\t\tc.Step("2. 执行核心业务调用并记录证据", func() {{
+\t\t\tc.AttachEvidence("case_id", "{case_id}")
+\t\t}})
 
-\tc.Step("3. 校验业务状态机与核心断言", func() {{
-\t\t// 校验核心断言
+\t\tc.Step("3. 校验业务状态机与核心断言", func() {{
+\t\t\t// 校验核心断言
+\t\t}})
 \t}})
 }}
 """
