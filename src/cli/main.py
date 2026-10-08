@@ -52,7 +52,8 @@ def main():
             print(json.dumps(res, ensure_ascii=False, indent=2))
         else:
             print(f"🎉 成功为应用 [{args.app}] 初始化 TrueOne 4 层标准测试工程！")
-            print(f"📁 目标目录: {res['targetDir']}")
+            target_path = res.get("testsRoot") or res.get("targetDir")
+            print(f"📁 目标目录: {target_path}")
             print("🏗️ 生成的分层结构:")
             for layer in res["layers"]:
                 print(f"   • {layer}")
