@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scaffold.project_scaffolder import ProjectScaffolder
 from scaffold.case_scaffolder import CaseScaffolder
+from runner.workflow_runner import WorkflowRunner
 
 
 def main():
@@ -39,6 +40,12 @@ def main():
     case_p.add_argument("--id", dest="case_id", help="指定用例 ID (可选)")
     case_p.add_argument("--dir", dest="target_dir", default="tests", help="输出目录 (默认 tests)")
     case_p.add_argument("--json", action="store_true", help="以 JSON 格式输出")
+
+    # 3. trueone run
+    run_p = subparsers.add_parser("run", help="本地直接执行 .workflow.yaml 用例 (0平台依赖，CLI First)")
+    run_p.add_argument("file", help="工作流 YAML 文件路径")
+    run_p.add_argument("-v", "--var", action="append", default=[], help="覆盖变量 (如 -v userId=usr_9527)")
+    run_p.add_argument("--json", action="store_true", help="以 JSON 格式输出结果")
 
     args = parser.parse_args()
     if not args.subcommand:
@@ -74,6 +81,20 @@ def main():
             print(f"✅ 成功生成 [{args.lang.upper()}] 测试用例骨架: {res['caseId']}")
             print(f"📁 文件已写入: {res['filePath']}")
             print(f"🏷️ 绑定需求: {res['req']} | 风险等级: {res['risk']}")
+
+    elif args.subcommand == "run":
+        override_vars = {}
+        for var_str in args.var:
+            if "=" in var_str:
+                k, v = var_str.split("=", 1)
+                override_vars[k.strip()] = v.strip()
+
+        runner = WorkflowRunner(yaml_path=args.file, override_vars=override_vars)
+        result = runner.run()
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        if result["status"] != "SUCCESS":
+            sys.exit(1)
 
 
 if __name__ == "__main__":

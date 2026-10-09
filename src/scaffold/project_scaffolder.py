@@ -37,15 +37,74 @@ class ProjectScaffolder:
         for d in [skills_dir, knowledge_dir / "domain" / "product", knowledge_dir / "tech", qa_dir]:
             d.mkdir(parents=True, exist_ok=True)
 
-        # 2. 拷贝 / 生成 4 个核心 Skills 到 tests/.agents/skills/
+        # 2. 拷贝 / 生成核心 Skills 到 tests/.agents/skills/
         src_skills = TEMPLATE_ROOT / "skills"
         if src_skills.exists():
-            for skill_name in ["test-design", "test-codegen", "test-review", "test-validate"]:
+            for skill_name in ["test-design", "test-codegen", "test-review", "test-validate", "e2e-dag-workflow"]:
                 dest = skills_dir / skill_name
                 dest.mkdir(parents=True, exist_ok=True)
                 src_file = src_skills / skill_name / "SKILL.md"
                 if src_file.exists():
                     shutil.copy(src_file, dest / "SKILL.md")
+
+        # 2.1 创建 workflows 目录并生成黄金 DAG 用例样例
+        wf_dir = self.tests_root / "workflows"
+        wf_dir.mkdir(parents=True, exist_ok=True)
+        sample_wf = wf_dir / "order_sample.workflow.yaml"
+        if not sample_wf.exists():
+            sample_wf.write_text("""id: order_reconciliation_workflow
+name: "订单交易与账本核销全链路核对"
+module: "交易履约引擎"
+priority: "P0"
+description: "通过网关下单、数据库流水双向校验及资金安全门禁，确保交易履约资金不发生单边账"
+
+variables:
+  userId: "usr_9527_vip"
+  merchantId: "mch_8888"
+  currency: "CNY"
+  expectedDeduction: 99.00
+  safetyLimit: 1000.00
+
+nodes:
+  - id: create_order
+    name: "创建商品订单"
+    type: HTTP
+    dependsOn: []
+    config:
+      url: "/api/v1/orders"
+      method: "POST"
+      body:
+        userId: "{{ variables.userId }}"
+        amount: "{{ variables.expectedDeduction }}"
+      extract:
+        orderId: "data.order_id"
+      assertions:
+        - field: "status_code"
+          operator: "equals"
+          expected: 200
+
+  - id: verify_ledger_entry
+    name: "核对账本记账流水"
+    type: SQL
+    dependsOn: ["create_order"]
+    config:
+      datasource: "finance_ledger_db"
+      sql: "SELECT amount, status FROM t_ledger_flow WHERE order_id = '{{ create_order.output.orderId }}';"
+      extract:
+        flowStatus: "status"
+      assertions:
+        - field: "status"
+          operator: "equals"
+          expected: "SETTLED"
+
+  - id: financial_safety_gate
+    name: "资金安全准入门禁"
+    type: QUALITY_GATE
+    dependsOn: ["verify_ledger_entry"]
+    config:
+      rule: "FINANCIAL_CONSISTENCY"
+      condition: "{{ verify_ledger_entry.output.flowStatus }} == 'SETTLED'"
+""", encoding="utf-8")
 
         # 3. 生成知识库核心引导文件到 tests/knowledge/
         (self.tests_root / "knowledge" / "ROUTING.md").write_text(
